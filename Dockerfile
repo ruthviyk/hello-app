@@ -1,16 +1,30 @@
-FROM mcr.microsoft.com/dotnet/aspnet:6.0 AS base
-#WORKDIR /app
-EXPOSE 80
-EXPOSE 443
-FROM mcr.microsoft.com/dotnet/sdk:6.0 AS build
-#USER root:root
+# Use Microsoft's official build .NET image.
+# https://hub.docker.com/_/microsoft-dotnet-core-sdk/
+FROM mcr.microsoft.com/dotnet/sdk:6.0-alpine AS build
 WORKDIR /app
-COPY hello-app.csproj ./
-#RUN dotnet restore hello-app.csproj
+
+# Install production dependencies.
+# Copy csproj and restore as distinct layers.
+COPY *.csproj ./
+RUN dotnet restore
+
+# Copy local code to the container image.
 COPY . .
-WORKDIR "/app/hello-app"
-RUN dotnet build "hello-app.csproj" -c Release -o /app/build FROM build AS publish
-RUN dotnet publish "hello-app.csproj" -c Release -o /app/publish /p:UseAppHost=false FROM base AS final
-WORKDIR /app
-COPY --from=publish /app/publish .
+
+
+# Build a release artifact.
+RUN dotnet publish -c Release -o /publish
+
+# Use Microsoft's official runtime .NET image.
+# https://hub.docker.com/_/microsoft-dotnet-core-aspnet/
+FROM mcr.microsoft.com/dotnet/aspnet:6.0-alpine AS runtime
+WORKDIR /publish
+COPY --from=build-env /publish .
+EXPOSE 80
+
+# Make sure the app binds to port 8081
+ENV ASPNETCORE_URLS http://*:8080
+ENV ASPNETCORE_ENVIRONMENT Development
+
+# Run the web service on container startup.
 ENTRYPOINT ["dotnet", "hello-app.dll"]
